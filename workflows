@@ -1,0 +1,53 @@
+name: CI
+
+on: [push]
+
+jobs:
+  lint-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest
+        run: |
+          pytest
+
+      - name: Lint with flake8
+        run: |
+          flake8 .
+
+      - name: SSH into server and deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "Stopping all containers..."
+            sudo docker ps -q | xargs -r sudo docker stop
+            sudo docker ps -a -q | xargs -r sudo docker rm
+
+            echo "Cloning latest repo..."
+            rm -rf /tmp/deploy-repo
+            git clone https://github.com/yourusername/your-repo.git /tmp/deploy-repo
+
+            echo "Building Docker image..."
+            cd /tmp/deploy-repo
+            sudo docker build -t myapp-image .
+
+            echo "Running container..."
+            sudo docker run -d --name myapp-container -p 80:5000 myapp-image
